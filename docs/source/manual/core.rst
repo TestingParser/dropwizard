@@ -1229,19 +1229,20 @@ mapping various aspects of POJOs to outgoing HTTP responses. Here's a basic reso
         }
 
         @GET
-        public NotificationList fetch(@PathParam("user") LongParam userId,
-                                      @QueryParam("count") @DefaultValue("20") IntParam count) {
-            final List<Notification> notifications = store.fetch(userId.get(), count.get());
+        public NotificationList fetch(@PathParam("user") OptionalLong userId,
+                                      @QueryParam("count") @DefaultValue("20") OptionalInt count) {
+            final List<Notification> notifications = store.fetch(
+                userId.orElseThrow(BadRequestException::new), count.orElseThrow(BadRequestException::new));
             if (notifications != null) {
                 return new NotificationList(userId, notifications);
             }
-            throw new WebApplicationException(Status.NOT_FOUND);
+            throw new NotFoundException();
         }
 
         @POST
-        public Response add(@PathParam("user") LongParam userId,
+        public Response add(@PathParam("user") OptionalLong userId,
                             @NotNull @Valid Notification notification) {
-            final long id = store.add(userId.get(), notification);
+            final long id = store.add(userId.orElseThrow(BadRequestException::new), notification);
             return Response.created(UriBuilder.fromResource(NotificationResource.class)
                                               .build(userId.get(), id))
                            .build();
@@ -1325,10 +1326,8 @@ For example:
 
 * A ``@PathParam("user")``-annotated ``String`` takes the raw value from the ``user`` variable in
   the matched URI template and passes it into the method as a ``String``.
-* A ``@QueryParam("count")``-annotated ``IntParam`` parameter takes the first ``count`` value from
-  the request's query string and passes it as a ``String`` to ``IntParam``'s constructor.
-  ``IntParam`` (and all other ``io.dropwizard.jersey.params.*`` classes) parses the string
-  as an ``Integer``, returning a ``400 Bad Request`` if the value is malformed.
+* A ``@QueryParam("count")``-annotated ``OptionalInt`` parameter takes the first ``count`` value from
+  the request's query string, converts it to an integer, and passes it into the method as an ``OptionalInt``.
 * A ``@FormParam("name")``-annotated ``Set<String>`` parameter takes all the ``name`` values from a
   posted form and passes them to the method as a set of strings.
 * A ``*Param``--annotated ``NonEmptyStringParam`` will interpret empty strings as absent strings,
@@ -1352,9 +1351,9 @@ this:
     :emphasize-lines: 3
 
     @POST
-    public Response add(@PathParam("user") LongParam userId,
+    public Response add(@PathParam("user") OptionalLong userId,
                         @NotNull @Valid Notification notification) {
-        final long id = store.add(userId.get(), notification);
+        final long id = store.add(userId.orElseThrow(BadRequestException::new), notification);
         return Response.created(UriBuilder.fromResource(NotificationResource.class)
                                           .build(userId.get(), id)
                        .build();
@@ -1534,7 +1533,7 @@ Testing, then, consists of creating an instance of your resource class and passi
             final List<Notification> notifications = mock(List.class);
             when(store.fetch(1, 20)).thenReturn(notifications);
 
-            final NotificationList list = resource.fetch(new LongParam("1"), new IntParam("20"));
+            final NotificationList list = resource.fetch(OptionalLong.of(1L), OptionalInt.of(20));
 
             assertThat(list.getUserId(),
                       is(1L));
